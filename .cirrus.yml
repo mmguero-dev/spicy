@@ -43,6 +43,9 @@ clang9_zeek31_ubuntu_debug_task:
       path: artifacts/diag.xml
       type: text/xml
       format: junit
+    upload_packages_artifacts:
+      path: build/spicy-*.tar.gz
+      type: application/gzip
 
 clang10_zeek31_ubuntu_release_task:
   trigger_type: manual
@@ -83,6 +86,9 @@ clang10_zeek31_ubuntu_release_task:
       path: artifacts/diag.xml
       type: text/xml
       format: junit
+    upload_packages_artifacts:
+      path: build/spicy-*.tar.gz
+      type: application/gzip
 
 clang9_zeek30_ubuntu_release_task:
   trigger_type: manual
@@ -122,6 +128,9 @@ clang9_zeek30_ubuntu_release_task:
       path: artifacts/diag.xml
       type: text/xml
       format: junit
+    upload_packages_artifacts:
+      path: build/spicy-*.tar.gz
+      type: application/gzip
 
 gcc9_ubuntu_release_no_jit_task:
   trigger_type: manual
@@ -161,6 +170,9 @@ gcc9_ubuntu_release_no_jit_task:
       path: artifacts/diag.xml
       type: text/xml
       format: junit
+    upload_packages_artifacts:
+      path: build/spicy-*.tar.gz
+      type: application/gzip
 
 macos_release_task:
   trigger_type: manual
@@ -193,7 +205,7 @@ macos_release_task:
 
   always:
     upload_packages_artifacts:
-      path: build/spicy-*-Darwin.tar.gz
+      path: build/spicy-*.tar.gz
       type: application/gzip
 
 docker_ubuntu_19_10_task:
