@@ -188,7 +188,7 @@ macos_release_task:
   #   - ninja -C build all check
   # test_build_script:
   #   - (cd tests && btest -j)
-  package_script:
+  packaging_script:
     - ninja -C build package
 
   always:
