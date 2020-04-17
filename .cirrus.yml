@@ -188,11 +188,11 @@ macos_release_task:
   #   - ninja -C build all check
   # test_build_script:
   #   - (cd tests && btest -j)
-  packaging_script:
+  package_script:
     - ninja -C build package
 
   always:
-    package_artifacts:
+    upload_packages_artifacts:
       path: build/spicy-*-Darwin.tar.gz
       type: application/gzip
 
