@@ -188,9 +188,9 @@ macos_release_task:
   ccache_cache:
     folder: /tmp/ccache
     fingerprint_script: echo $CIRRUS_TASK_NAME-$CIRRUS_OS
-    environment:
-      CCACHE_DIR: /tmp/cache
-      CCACHE_COMPRESS: 1
+  environment:
+    CCACHE_DIR: /tmp/cache
+    CCACHE_COMPRESS: 1
 
   # Pull tags as well since by default Cirrus CI does not fetch them, but they
   # are needed for `git describe` used in `scripts/autogen-version`. We also
