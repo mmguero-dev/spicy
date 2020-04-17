@@ -189,7 +189,7 @@ macos_release_task:
     folder: /tmp/ccache
     fingerprint_script: echo $CIRRUS_TASK_NAME-$CIRRUS_OS
   environment:
-    CCACHE_DIR: /tmp/cache
+    CCACHE_DIR: /tmp/ccache
     CCACHE_COMPRESS: 1
 
   # Pull tags as well since by default Cirrus CI does not fetch them, but they
