@@ -78,6 +78,8 @@ clang10_zeek31_ubuntu_release_task:
   install_script:        ./ci/run-ci -b build install
   cleanup_script:        ./ci/run-ci -b build cleanup
   test_install_script:   ./ci/run-ci -b build test-install
+  package_script:
+    - ninja -C build package
 
   always:
     ci_artifacts:
@@ -120,6 +122,8 @@ clang9_zeek30_ubuntu_release_task:
   install_script:        ./ci/run-ci -b build install
   cleanup_script:        ./ci/run-ci -b build cleanup
   test_install_script:   ./ci/run-ci -b build test-install
+  package_script:
+    - ninja -C build package
 
   always:
     ci_artifacts:
@@ -162,6 +166,8 @@ gcc9_ubuntu_release_no_jit_task:
   install_script:        ./ci/run-ci -b build install
   cleanup_script:        ./ci/run-ci -b build cleanup
   test_install_script:   ./ci/run-ci -b build test-install-nojit
+  package_script:
+    - ninja -C build package
 
   always:
     ci_artifacts:
