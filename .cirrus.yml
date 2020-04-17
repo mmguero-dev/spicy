@@ -184,10 +184,17 @@ macos_release_task:
 
   configure_script:
     - ./configure --generator=Ninja --with-cxx-compiler=/usr/local/opt/llvm/bin/clang++ --with-bison=/usr/local/opt/bison --with-flex=/usr/local/opt/flex --enable-ccache
-  build_script:
-    - ninja -C build all check
-  test_build_script:
-    - (cd tests && btest -j)
+  # build_script:
+  #   - ninja -C build all check
+  # test_build_script:
+  #   - (cd tests && btest -j)
+  package_script:
+    - ninja -C build package
+
+  always:
+    package_artifacts:
+      path: build/spicy-*-Darwin.tar.gz
+      type: application/gzip
 
 docker_ubuntu_19_10_task:
   trigger_type: manual
