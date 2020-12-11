@@ -32,8 +32,8 @@ extern "C" {
 void detail::_Trampoline(void* argsp) {
     auto fiber = *reinterpret_cast<detail::Fiber**>(argsp);
 
-    HILTI_RT_DEBUG("fibers", fmt("[%p] entering trampoline loop", fiber));
     fiber->_finishSwitchFiber("trampoline-init");
+    HILTI_RT_DEBUG("fibers", fmt("[%p] entering trampoline loop", fiber));
 
     // Via recycling a fiber can run an arbitrary number of user jobs. So
     // this trampoline is really a loop that yields after it has finished its
@@ -69,7 +69,9 @@ detail::Fiber::Fiber(bool is_main_fiber) : _is_main(is_main_fiber), _fiber(std::
         _caller = nullptr;
     }
     else {
-        auto alloc = ::fiber_alloc(_fiber.get(), StackSize, fiber_bottom, this, FIBER_FLAG_GUARD_LO | FIBER_FLAG_GUARD_HI);
+        auto shared_stack = context::detail::get()->shared_stack;
+        auto alloc =
+            ::fiber_init(_fiber.get(), shared_stack->stack, shared_stack->stack_size, fiber_bottom, this);
         if ( ! alloc )
             internalError("could not allocate fiber");
 
@@ -101,7 +103,21 @@ void detail::Fiber::_switchTo(detail::Fiber* to) {
     auto current_fiber = context->current_fiber;
     assert(current_fiber != to);
     context->current_fiber = to;
-    // std::cerr << "used stack: " << ::fiber_stack_used_size(current_fiber->_fiber.get()) << std::endl;
+
+    if ( ! current_fiber->isMain() ) {
+        // Copy old stack out.
+        current_fiber->saved_stack.size = ::fiber_stack_used_size(current_fiber->_fiber.get());
+        current_fiber->saved_stack.base = ::realloc(current_fiber->saved_stack.base, current_fiber->saved_stack.size);
+        HILTI_RT_DEBUG("fibers", fmt("[%p/from] copy out %p/%llu to %p", current_fiber, ::fiber_stack(current_fiber->_fiber.get()), current_fiber->saved_stack.size, current_fiber->saved_stack.base));
+        ::memcpy(current_fiber->saved_stack.base, ::fiber_stack(current_fiber->_fiber.get()), current_fiber->saved_stack.size);
+    }
+
+    if ( ! to->isMain() && to->saved_stack.base ) {
+        // Copy new stack in.
+        HILTI_RT_DEBUG("fibers", fmt("[%p/to  ] copy in %p/%llu to %p", to, to->saved_stack.base, to->saved_stack.size, to->saved_stack.base));
+        ::memcpy(::fiber_stack(to->_fiber.get()), to->saved_stack.base, to->saved_stack.size);
+    }
+
     ::fiber_switch(current_fiber->_fiber.get(), to->_fiber.get());
 
     _finishSwitchFiber("run");
@@ -203,8 +219,9 @@ void detail::Fiber::_startSwitchFiber(const char* tag, const void* stack_bottom,
         stack_size = _asan.prev_size;
     }
 
-    HILTI_RT_DEBUG("fibers", fmt("[%p/%s/asan] start_switch_fiber %p/%p (fake_stack=%p)", context::detail::get()->current_fiber, tag, stack_bottom,
-                                 stack_size, &_asan.fake_stack));
+    HILTI_RT_DEBUG("fibers",
+                   fmt("[%p/%s/asan] start_switch_fiber %p/%p (fake_stack=%p)", context::detail::get()->current_fiber,
+                       tag, stack_bottom, stack_size, &_asan.fake_stack));
     __sanitizer_start_switch_fiber(&_asan.fake_stack, stack_bottom, stack_size);
 #else
     HILTI_RT_DEBUG("fibers", fmt("[%p] start_switch_fiber in %s", context::detail::get()->current_fiber, tag));
@@ -214,8 +231,9 @@ void detail::Fiber::_startSwitchFiber(const char* tag, const void* stack_bottom,
 void detail::Fiber::_finishSwitchFiber(const char* tag) {
 #ifdef HILTI_HAVE_SANITIZER
     __sanitizer_finish_switch_fiber(_asan.fake_stack, &_asan.prev_bottom, &_asan.prev_size);
-    HILTI_RT_DEBUG("fibers", fmt("[%p/%s/asan] finish_switch_fiber %p/%p (fake_stack=%p)", context::detail::get()->current_fiber, tag, _asan.prev_bottom,
-                                 _asan.prev_size, _asan.fake_stack));
+    HILTI_RT_DEBUG("fibers",
+                   fmt("[%p/%s/asan] finish_switch_fiber %p/%p (fake_stack=%p)", context::detail::get()->current_fiber,
+                       tag, _asan.prev_bottom, _asan.prev_size, _asan.fake_stack));
 #else
     HILTI_RT_DEBUG("fibers", fmt("[%p] finish_switch_fiber in %s", context::detail::get()->current_fiber, tag));
 #endif

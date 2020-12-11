@@ -134,7 +134,10 @@ private:
      */
     Fiber* _caller = nullptr;
 
-    // void* saved_stack = nullptr;
+    struct {
+        void* base = nullptr;
+        size_t size = 0;
+    } saved_stack;
 
 #ifdef HILTI_HAVE_SANITIZER
     struct {
