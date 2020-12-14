@@ -297,7 +297,8 @@ struct Visitor : hilti::visitor::PreOrder<void, Visitor> {
                 cg->unit()->add(t); // XXX
 
             // Tell linker about our implementation.
-            auto hook_join = cxx::linker::Join{.id = id_hook_stub, .callee = d, .aux_types = aux_types, .priority = priority };
+            auto hook_join =
+                cxx::linker::Join{.id = id_hook_stub, .callee = d, .aux_types = aux_types, .priority = priority};
 
             cg->unit()->add(d);
             cg->unit()->add(hook_join);
@@ -380,27 +381,54 @@ struct Visitor : hilti::visitor::PreOrder<void, Visitor> {
 
         if ( f.callingConvention() == function::CallingConvention::Extern ) {
             // Create a separate function that we expose to C++. Inside that
-            // wrapper we execute the actual function inside a lambda
-            // function prepared to suspend.
+            // wrapper we execute the actual function inside a lambda function
+            // prepared to suspend. We move also of the functions arguments to
+            // the heap, too, because the caller's stack may not be accessible
+            // inside the callee due to our fiber runtime swapping stacks out.
             auto body = cxx::Block();
             auto cb = cxx::Block();
-            auto args =
-                util::join(util::transform(cxx_func.declaration.args, [](auto& x) { return fmt("%s", x.id); }), ", ");
+
+            auto outer_args =
+                util::join(util::transform(cxx_func.declaration.args,
+                                           [](auto& x) {
+                                               std::string type(x.type);
+                                               if ( type.find("const hilti::rt::ValueReference") !=
+                                                    std::string::npos ) {
+                                                   // Special-case: We don't need to (nor want to) deep-copy value
+                                                   // references, as the payload already resides on the heap.
+                                                   auto i = type.find("<");
+                                                   auto j = type.find(">");
+                                                   return fmt("hilti::rt::ValueReference<%s>(%s.asSharedPtr())",
+                                                              type.substr(i + 1, j - i - 1), x.id);
+                                               }
+                                               else
+                                                   return fmt("%s", x.id);
+                                           }),
+
+                           ", ");
+
+            body.addLocal({.id = "args", .type = "auto", .init = fmt("std::make_tuple(%s)", outer_args)});
+            body.addLocal({.id = "args_on_heap", .type = "auto", .init = "new decltype(args)(std::move(args))"});
+
+            int idx = 0;
+            auto inner_args =
+                util::join(util::transform(cxx_func.declaration.args,
+                                           [&idx](auto& x) { return fmt("std::get<%d>(*args_on_heap)", idx++); }),
+                           ", ");
 
             // If the function returns void synthesize a `Nothing` return value here.
             if ( ft.result().type() != type::Void() )
-                cb.addReturn(fmt("%s(%s)", d.id, args));
+                cb.addReturn(fmt("%s(%s)", d.id, inner_args));
             else {
-                cb.addStatement(fmt("%s(%s)", d.id, args));
+                cb.addStatement(fmt("%s(%s)", d.id, inner_args));
                 cb.addReturn("hilti::rt::Nothing()");
             }
 
-            body.addLambda("cb", "[&](hilti::rt::resumable::Handle* r) -> std::any", std::move(cb));
-
+            body.addLambda("cb", "[args_on_heap](hilti::rt::resumable::Handle* r) -> std::any", std::move(cb));
             body.addLocal(
-                cxx::declaration::Local{.id = "r", .type = "hilti::rt::Resumable", .init = "{std::move(cb)}"});
-            body.addStatement("r.run()");
-            body.addReturn("r");
+                {.id = "r", .type = "hilti::rt::Resumable*", .init = "new hilti::rt::Resumable{std::move(cb)}"});
+            body.addStatement("r->run()");
+            body.addReturn("std::move(*r)");
 
             auto extern_d = d;
             extern_d.id = cxx::ID(
