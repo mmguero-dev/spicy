@@ -36,6 +36,68 @@ using Handle = detail::Fiber;
 
 namespace detail {
 
+/** Context-wide state for managing all fibers associated with that context. */
+struct FiberContext {
+    FiberContext();
+    ~FiberContext();
+
+    /** (Pseudo-)fiber representing the main function. */
+    std::unique_ptr<detail::Fiber> main;
+
+    /** Fiber implementing the switch trampoline. */
+    std::unique_ptr<::Fiber> switch_trampoline;
+
+    /** Currently executing fiber .*/
+    detail::Fiber* current = nullptr;
+
+    /** Fiber holding the shared stack (the fiber itself isn't used) */
+    std::unique_ptr<::Fiber> shared_stack;
+
+    /** Cache of previously used fibers available for reuse. */
+    std::vector<std::unique_ptr<Fiber>> cache;
+
+    // Size of single joined stack when using a stack shared across fibers.
+    static constexpr unsigned int SharedStackSize = 10 * 1024 * 1024;
+
+    // Size of stack for each fiber when using individual per-fiber stacks.
+    static constexpr unsigned int IndividualStackSize = 327'68;
+
+    // Max. number of fibers cached for reuse.
+    static constexpr unsigned int CacheSize = 100;
+};
+
+/**
+ * Helper tracking a stack region that's in use by a fiber. This class doesn't
+ * copy any stack content, it just captures beginning and end of the memory
+ * space that the stack occupies. It's a wrapper around any platform-specifics
+ * that doing may entail
+ */
+struct StackRegion {
+    /** Constructor.
+     *
+     * @param fiber fiber of which to record its current stack region
+     */
+    StackRegion(const ::Fiber* fiber);
+
+    /** Default constructing initializing to an empty region. */
+    StackRegion() : lower(nullptr), upper(nullptr) {}
+
+    char* lower; //> lower memory address occupied by stack
+    char* upper; //> highest address occupied by stack plus one
+
+    /** Returns the size of the occupied stack region. */
+    auto size() const { return upper - lower; }
+};
+
+// Render stack region for use in debug output.
+inline std::ostream& operator<<(std::ostream& out, const StackRegion& r) {
+    out << fmt("%p-%p:%zu", r.lower, r.upper, r.size());
+    return out;
+}
+
+// Entry point for stack switch trampoline.
+extern "C" void execute_fiber_switch(void* args0);
+
 /**
  * A fiber implements a co-routine that can at any time yield control back to
  * the caller, to be resumed later. This is the internal class implementing
@@ -99,14 +161,10 @@ public:
 
     static Statistics statistics();
 
-    // Size of stack for each fiber.
-    static constexpr unsigned int StackSize = 327'680;
-
-    // Max. number of fibers cached for reuse.
-    static constexpr unsigned int CacheSize = 100;
-
 private:
     friend void _Trampoline(void* argsp);
+    friend void execute_fiber_switch(void* args0);
+
     enum class State { Init, Running, Aborting, Yielded, Idle, Finished };
 
     /** Code to run just before we switch to a fiber. */
@@ -134,7 +192,11 @@ private:
      */
     Fiber* _caller = nullptr;
 
-    // void* saved_stack = nullptr;
+    /** Buffer the fiber's stack when swapped out. */
+    struct {
+        StackRegion region;     //> live region originally occupied by stack
+        void* buffer = nullptr; //> allocated memory holding swapped out stack content
+    } saved_stack;
 
 #ifdef HILTI_HAVE_SANITIZER
     struct {

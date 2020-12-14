@@ -278,8 +278,8 @@ TEST_CASE("prime-cache") {
     hilti::rt::detail::Fiber::primeCache();
 
     stats = hilti::rt::detail::Fiber::statistics();
-    REQUIRE(stats.current == hilti::rt::detail::Fiber::CacheSize);
-    REQUIRE(stats.cached == hilti::rt::detail::Fiber::CacheSize);
+    REQUIRE(stats.current == hilti::rt::detail::FiberContext::CacheSize);
+    REQUIRE(stats.cached == hilti::rt::detail::FiberContext::CacheSize);
 }
 
 TEST_SUITE_END();
